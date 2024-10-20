@@ -13,7 +13,14 @@
         libPath = pkgs.lib.makeLibraryPath [ ];
       in {
         devShell = pkgs.mkShell {
-          buildInputs = with pkgs; [ libxml2 pkg-config clang_16 llvm_16 ];
+          buildInputs = with pkgs; [
+            libxml2
+            pkg-config
+            clang_16
+            llvm_16
+            fuse
+            cmake
+          ];
           MAKEFLAGS = "-j$(nproc)";
         };
       });
