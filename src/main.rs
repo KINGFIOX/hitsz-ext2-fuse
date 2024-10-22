@@ -25,6 +25,7 @@ use fuser::{
     TimeOrNow,
     FUSE_ROOT_ID,
 };
+use libc::{ getgid, getuid };
 use log::{ debug, warn };
 use log::{ error, LevelFilter };
 use serde::{ Deserialize, Serialize };
@@ -98,12 +99,12 @@ struct SuperBlock {
     bmapstart: u32,
 }
 
-#[repr(u16)]
+#[repr(i16)]
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 enum FileKind {
     Directory = 1,
     File = 2,
-    Device = 3,
+    _Device = 3, // 这个不一定有用
     Symlink = 4,
 }
 
@@ -113,7 +114,7 @@ impl From<FileKind> for fuser::FileType {
             FileKind::File => fuser::FileType::RegularFile,
             FileKind::Directory => fuser::FileType::Directory,
             FileKind::Symlink => fuser::FileType::Symlink,
-            FileKind::Device => todo!(),
+            FileKind::_Device => todo!(),
         }
     }
 }
@@ -125,11 +126,11 @@ struct DInode {
     /// File type
     kind: FileKind,
     /// Major device number (T_DEVICE only)
-    major: u16,
+    _major: i16,
     /// Minor device number (T_DEVICE only)
-    minor: u16,
+    _minor: i16,
     /// Number of hard links to inode in file system
-    nlink: u16,
+    nlink: i16,
     /// Size of file (bytes)
     size: u32,
     /// Data block addresses
@@ -137,186 +138,52 @@ struct DInode {
 }
 
 #[repr(C)]
+#[derive(Clone, Serialize, Deserialize)]
 struct DirEnt {
-    inum: u16, // inode num
+    /// inode num
+    inum: u16,
     name: [u8; DIRSIZ],
 }
 
-#[derive(Debug)]
-enum XattrNamespace {
-    Security,
-    System,
-    Trusted,
-    User,
+/// inode in memory
+struct MInode {
+    /// Device number
+    _dev: u32,
+    /// Inode number
+    inum: u32,
+    //   ref : i32,                // Reference count
+    //   struct sleeplock lock;  // protects everything below here
+    /// inode has been read from disk?
+    valid: bool,
+    /// copy of disk inode
+    kind: FileKind,
+    _major: i16,
+    _minor: i16,
+    nlink: i16,
+    size: u32,
+    addrs: [u32; NDIRECT + 1],
 }
 
-fn parse_xattr_namespace(key: &[u8]) -> Result<XattrNamespace, c_int> {
-    let user = b"user.";
-    if key.len() < user.len() {
-        return Err(libc::ENOTSUP);
-    }
-    if key[..user.len()].eq(user) {
-        return Ok(XattrNamespace::User);
-    }
-
-    let system = b"system.";
-    if key.len() < system.len() {
-        return Err(libc::ENOTSUP);
-    }
-    if key[..system.len()].eq(system) {
-        return Ok(XattrNamespace::System);
-    }
-
-    let trusted = b"trusted.";
-    if key.len() < trusted.len() {
-        return Err(libc::ENOTSUP);
-    }
-    if key[..trusted.len()].eq(trusted) {
-        return Ok(XattrNamespace::Trusted);
-    }
-
-    let security = b"security";
-    if key.len() < security.len() {
-        return Err(libc::ENOTSUP);
-    }
-    if key[..security.len()].eq(security) {
-        return Ok(XattrNamespace::Security);
-    }
-
-    return Err(libc::ENOTSUP);
-}
-
-fn clear_suid_sgid(attr: &mut InodeAttributes) {
-    attr.mode &= !libc::S_ISUID as u16;
-    // SGID is only suppose to be cleared if XGRP is set
-    if (attr.mode & (libc::S_IXGRP as u16)) != 0 {
-        attr.mode &= !libc::S_ISGID as u16;
-    }
-}
-
-fn creation_gid(parent: &InodeAttributes, gid: u32) -> u32 {
-    if (parent.mode & (libc::S_ISGID as u16)) != 0 {
-        return parent.gid;
-    }
-
-    gid
-}
-
-fn xattr_access_check(
-    key: &[u8],
-    access_mask: i32,
-    inode_attrs: &InodeAttributes,
-    request: &Request<'_>
-) -> Result<(), c_int> {
-    match parse_xattr_namespace(key)? {
-        XattrNamespace::Security => {
-            if access_mask != libc::R_OK && request.uid() != 0 {
-                return Err(libc::EPERM);
-            }
-        }
-        XattrNamespace::Trusted => {
-            if request.uid() != 0 {
-                return Err(libc::EPERM);
-            }
-        }
-        XattrNamespace::System => {
-            if key.eq(b"system.posix_acl_access") {
-                if
-                    !check_access(
-                        inode_attrs.uid,
-                        inode_attrs.gid,
-                        inode_attrs.mode,
-                        request.uid(),
-                        request.gid(),
-                        access_mask
-                    )
-                {
-                    return Err(libc::EPERM);
-                }
-            } else if request.uid() != 0 {
-                return Err(libc::EPERM);
-            }
-        }
-        XattrNamespace::User => {
-            if
-                !check_access(
-                    inode_attrs.uid,
-                    inode_attrs.gid,
-                    inode_attrs.mode,
-                    request.uid(),
-                    request.gid(),
-                    access_mask
-                )
-            {
-                return Err(libc::EPERM);
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn time_now() -> (i64, u32) {
-    time_from_system_time(&SystemTime::now())
-}
-
-fn system_time_from_time(secs: i64, nsecs: u32) -> SystemTime {
-    if secs >= 0 {
-        UNIX_EPOCH + Duration::new(secs as u64, nsecs)
-    } else {
-        UNIX_EPOCH - Duration::new(-secs as u64, nsecs)
-    }
-}
-
-fn time_from_system_time(system_time: &SystemTime) -> (i64, u32) {
-    // Convert to signed 64-bit time with epoch at 0
-    match system_time.duration_since(UNIX_EPOCH) {
-        Ok(duration) => (duration.as_secs() as i64, duration.subsec_nanos()),
-        Err(before_epoch_error) =>
-            (
-                -(before_epoch_error.duration().as_secs() as i64),
-                before_epoch_error.duration().subsec_nanos(),
-            ),
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct InodeAttributes {
-    pub inode: Inode,
-    pub open_file_handles: u64, // Ref count of open file handles to this inode
-    pub size: u64,
-    pub last_accessed: (i64, u32),
-    pub last_modified: (i64, u32),
-    pub last_metadata_changed: (i64, u32),
-    pub kind: FileKind,
-    // Permissions and special mode bits
-    pub mode: u16,
-    pub hardlinks: u32,
-    pub uid: u32,
-    pub gid: u32,
-    pub xattrs: BTreeMap<Vec<u8>, Vec<u8>>,
-}
-
-impl From<InodeAttributes> for fuser::FileAttr {
-    fn from(attrs: InodeAttributes) -> Self {
+impl From<MInode> for fuser::FileAttr {
+    fn from(value: MInode) -> Self {
+        let uid = unsafe { getuid() };
+        let gid = unsafe { getgid() };
+        let blocks = (((value.size as usize) + BSIZE - 1) / BSIZE) as u64;
         fuser::FileAttr {
-            ino: attrs.inode,
-            size: attrs.size,
-            blocks: (attrs.size + BLOCK_SIZE - 1) / BLOCK_SIZE,
-            atime: system_time_from_time(attrs.last_accessed.0, attrs.last_accessed.1),
-            mtime: system_time_from_time(attrs.last_modified.0, attrs.last_modified.1),
-            ctime: system_time_from_time(
-                attrs.last_metadata_changed.0,
-                attrs.last_metadata_changed.1
-            ),
-            crtime: SystemTime::UNIX_EPOCH,
-            kind: attrs.kind.into(),
-            perm: attrs.mode,
-            nlink: attrs.hardlinks,
-            uid: attrs.uid,
-            gid: attrs.gid,
+            ino: value.inum as u64,
+            size: value.size as u64,
+            blocks,
+            atime: UNIX_EPOCH, // 毁灭吧
+            mtime: UNIX_EPOCH,
+            ctime: UNIX_EPOCH,
+            crtime: UNIX_EPOCH,
+            kind: value.kind.into(),
+            perm: u16::MAX,
+            nlink: value.nlink as u32,
+            uid,
+            gid,
             rdev: 0,
-            blksize: BLOCK_SIZE as u32,
+            blksize: BSIZE as u32,
             flags: 0,
         }
     }
