@@ -1,3 +1,6 @@
+//! // Disk layout:
+//! [ boot block | sb block | log | inode blocks | free bit map | data blocks ]
+
 #![allow(clippy::needless_return)]
 #![allow(clippy::unnecessary_cast)] // libc::S_* are u16 or u32 depending on the platform
 
@@ -40,27 +43,68 @@ use std::sync::atomic::{ AtomicU64, Ordering };
 use std::time::{ Duration, SystemTime, UNIX_EPOCH };
 use std::{ fs, io };
 
-const BLOCK_SIZE: u64 = 512;
-const MAX_NAME_LENGTH: u32 = 255;
-const MAX_FILE_SIZE: u64 = 1024 * 1024 * 1024 * 1024;
+const ROOTINO: u16 = 1; // root i-number
 
-// Top two file handle bits are used to store permissions
-// Note: This isn't safe, since the client can modify those bits. However, this implementation
-// is just a toy
-const FILE_HANDLE_READ_BIT: u64 = 1 << 63;
-const FILE_HANDLE_WRITE_BIT: u64 = 1 << 62;
+const FSMAGIC: u32 = 0x10203040;
 
-const FMODE_EXEC: i32 = 0x20;
+/// block size
+const BSIZE: usize = 1024;
 
-type Inode = u64;
+/// direct blocks in inode
+const NDIRECT: usize = 12;
 
-type DirectoryDescriptor = BTreeMap<Vec<u8>, (Inode, FileKind)>;
+/// number of direct blocks
+const NINDIRECT: usize = BSIZE / size_of::<u32>();
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq)]
+/// max of inodes, which a file can have
+const MAXFILE: usize = NDIRECT + NINDIRECT;
+
+/// inodes per block
+const IPB: usize = BSIZE / size_of::<DInode>();
+
+/// bitmap per block
+const BPB: usize = BSIZE * 8;
+
+/// Directory is a file containing a sequence of dirent structures.
+const DIRSIZ: usize = 14;
+
+/// max # of blocks any FS op writes
+const MAXOPBLOCKS: usize = 10;
+
+/// max data blocks in on-disk log
+const LOGSIZE: usize = MAXOPBLOCKS * 3;
+
+/// size of file system in blocks
+const FSSIZE: usize = 1000;
+
+#[repr(C)]
+#[derive(Serialize, Deserialize)]
+struct SuperBlock {
+    /// Must be FSMAGIC
+    magic: u32,
+    /// Size of file system image (blocks)
+    size: u32,
+    /// Number of data blocks
+    nblocks: u32,
+    /// Number of inodes.
+    ninodes: u32,
+    /// Number of log blocks
+    nlog: u32,
+    /// Block number of first log block
+    logstart: u32,
+    /// Block number of first inode block
+    inodestart: u32,
+    /// Block number of first free map block
+    bmapstart: u32,
+}
+
+#[repr(u16)]
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 enum FileKind {
-    File,
-    Directory,
-    Symlink,
+    Directory = 1,
+    File = 2,
+    Device = 3,
+    Symlink = 4,
 }
 
 impl From<FileKind> for fuser::FileType {
@@ -69,8 +113,33 @@ impl From<FileKind> for fuser::FileType {
             FileKind::File => fuser::FileType::RegularFile,
             FileKind::Directory => fuser::FileType::Directory,
             FileKind::Symlink => fuser::FileType::Symlink,
+            FileKind::Device => todo!(),
         }
     }
+}
+
+#[repr(C)]
+#[derive(Clone, Serialize, Deserialize)]
+// inode on disk
+struct DInode {
+    /// File type
+    kind: FileKind,
+    /// Major device number (T_DEVICE only)
+    major: u16,
+    /// Minor device number (T_DEVICE only)
+    minor: u16,
+    /// Number of hard links to inode in file system
+    nlink: u16,
+    /// Size of file (bytes)
+    size: u32,
+    /// Data block addresses
+    addrs: [u32; NDIRECT + 1 + 1],
+}
+
+#[repr(C)]
+struct DirEnt {
+    inum: u16, // inode num
+    name: [u8; DIRSIZ],
 }
 
 #[derive(Debug)]
