@@ -1095,6 +1095,7 @@ impl Filesystem for SimpleFS {
         reply.entry(&Duration::new(0, 0), &attrs.into(), 0);
     }
 
+    /// FIXME 这个函数有点问题, 注意一下
     fn rename(
         &mut self,
         req: &Request,
@@ -1197,17 +1198,13 @@ impl Filesystem for SimpleFS {
             self.write_directory_content(new_parent, entries);
 
             let mut entries = self.get_directory_content(parent).unwrap();
-            entries.insert(name.as_bytes().to_vec(), (new_inode_attrs.inode, new_inode_attrs.kind));
+            // entries.insert(name.as_bytes().to_vec(), (new_inode_attrs.inode, new_inode_attrs.kind));
+            entries.remove(name.as_bytes());
             self.write_directory_content(parent, entries);
 
-            parent_attrs.last_metadata_changed = time_now();
-            parent_attrs.last_modified = time_now();
-            self.write_inode(&parent_attrs);
-            new_parent_attrs.last_metadata_changed = time_now();
-            new_parent_attrs.last_modified = time_now();
-            self.write_inode(&new_parent_attrs);
             inode_attrs.last_metadata_changed = time_now();
             self.write_inode(&inode_attrs);
+
             new_inode_attrs.last_metadata_changed = time_now();
             self.write_inode(&new_inode_attrs);
 
@@ -1215,12 +1212,21 @@ impl Filesystem for SimpleFS {
                 let mut entries = self.get_directory_content(inode_attrs.inode).unwrap();
                 entries.insert(b"..".to_vec(), (new_parent, FileKind::Directory));
                 self.write_directory_content(inode_attrs.inode, entries);
+                parent_attrs.hardlinks -= 1;
             }
+            parent_attrs.last_metadata_changed = time_now();
+            parent_attrs.last_modified = time_now();
+            self.write_inode(&parent_attrs);
+
             if new_inode_attrs.kind == FileKind::Directory {
                 let mut entries = self.get_directory_content(new_inode_attrs.inode).unwrap();
                 entries.insert(b"..".to_vec(), (parent, FileKind::Directory));
                 self.write_directory_content(new_inode_attrs.inode, entries);
+                new_parent_attrs.hardlinks += 1;
             }
+            new_parent_attrs.last_metadata_changed = time_now();
+            new_parent_attrs.last_modified = time_now();
+            self.write_inode(&new_parent_attrs);
 
             reply.ok();
             return;
