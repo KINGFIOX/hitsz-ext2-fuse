@@ -490,16 +490,16 @@ impl Filesystem for SimpleFS {
                 last_modified: time_now(),
                 last_metadata_changed: time_now(),
                 kind: FileKind::Directory,
-                mode: 0o777,
-                hardlinks: 2,
+                mode: 0o777, // 八进制
+                hardlinks: 2, // 这里是 2, 因为: inode 本身是 1, 然后目录里面有 "." 这样的记录, 这也是 1
                 uid: 0,
                 gid: 0,
                 xattrs: Default::default(),
             };
-            self.write_inode(&root);
+            self.write_inode(&root); // meta data
             let mut entries = BTreeMap::new();
             entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
-            self.write_directory_content(FUSE_ROOT_ID, entries);
+            self.write_directory_content(FUSE_ROOT_ID, entries); // content
         }
         Ok(())
     }
@@ -531,6 +531,8 @@ impl Filesystem for SimpleFS {
     }
 
     fn forget(&mut self, _req: &Request, _ino: u64, _nlookup: u64) {}
+
+    fn destroy(&mut self) {}
 
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
         match self.get_inode(ino) {
@@ -568,6 +570,7 @@ impl Filesystem for SimpleFS {
         if let Some(mode) = mode {
             debug!("chmod() called with {:?}, {:o}", inode, mode);
             if req.uid() != 0 && req.uid() != attrs.uid {
+                // 不是 root, 或者不是文件的所有者
                 reply.error(libc::EPERM);
                 return;
             }
@@ -778,14 +781,13 @@ impl Filesystem for SimpleFS {
         }
         parent_attrs.last_modified = time_now();
         parent_attrs.last_metadata_changed = time_now();
-        self.write_inode(&parent_attrs);
 
         if req.uid() != 0 {
             mode &= !(libc::S_ISUID | libc::S_ISGID) as u32;
         }
 
         let inode = self.allocate_next_inode();
-        let attrs = InodeAttributes {
+        let mut attrs = InodeAttributes {
             inode,
             open_file_handles: 0,
             size: 0,
@@ -799,15 +801,18 @@ impl Filesystem for SimpleFS {
             gid: creation_gid(&parent_attrs, req.gid()),
             xattrs: Default::default(),
         };
-        self.write_inode(&attrs);
         File::create(self.content_path(inode)).unwrap();
 
         if as_file_kind(mode) == FileKind::Directory {
             let mut entries = BTreeMap::new();
             entries.insert(b".".to_vec(), (inode, FileKind::Directory));
+            attrs.hardlinks += 1;
             entries.insert(b"..".to_vec(), (parent, FileKind::Directory));
+            parent_attrs.hardlinks += 1;
             self.write_directory_content(inode, entries);
         }
+        self.write_inode(&attrs);
+        self.write_inode(&parent_attrs);
 
         let mut entries = self.get_directory_content(parent).unwrap();
         entries.insert(name.as_bytes().to_vec(), (inode, attrs.kind));
@@ -855,6 +860,7 @@ impl Filesystem for SimpleFS {
         }
         parent_attrs.last_modified = time_now();
         parent_attrs.last_metadata_changed = time_now();
+        parent_attrs.hardlinks += 1;
         self.write_inode(&parent_attrs);
 
         if req.uid() != 0 {
@@ -935,6 +941,10 @@ impl Filesystem for SimpleFS {
         {
             reply.error(libc::EACCES);
             return;
+        }
+
+        if attrs.kind == FileKind::Directory {
+            parent_attrs.hardlinks -= 1;
         }
 
         parent_attrs.last_metadata_changed = time_now();
@@ -1853,6 +1863,154 @@ impl Filesystem for SimpleFS {
             reply.error(libc::ENOENT);
         }
     }
+
+    fn flush(&mut self, _req: &Request<'_>, ino: u64, fh: u64, lock_owner: u64, reply: ReplyEmpty) {
+        debug!(
+            "[Not Implemented] flush(ino: {:#x?}, fh: {}, lock_owner: {:?})",
+            ino,
+            fh,
+            lock_owner
+        );
+        reply.error(libc::ENOSYS);
+    }
+
+    fn fsync(&mut self, _req: &Request<'_>, ino: u64, fh: u64, datasync: bool, reply: ReplyEmpty) {
+        debug!("[Not Implemented] fsync(ino: {:#x?}, fh: {}, datasync: {})", ino, fh, datasync);
+        reply.error(libc::ENOSYS);
+    }
+
+    fn readdirplus(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        reply: fuser::ReplyDirectoryPlus
+    ) {
+        debug!("[Not Implemented] readdirplus(ino: {:#x?}, fh: {}, offset: {})", ino, fh, offset);
+        reply.error(libc::ENOSYS);
+    }
+
+    fn fsyncdir(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        datasync: bool,
+        reply: ReplyEmpty
+    ) {
+        debug!("[Not Implemented] fsyncdir(ino: {:#x?}, fh: {}, datasync: {})", ino, fh, datasync);
+        reply.error(libc::ENOSYS);
+    }
+
+    fn getlk(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        lock_owner: u64,
+        start: u64,
+        end: u64,
+        typ: i32,
+        pid: u32,
+        reply: fuser::ReplyLock
+    ) {
+        debug!(
+            "[Not Implemented] getlk(ino: {:#x?}, fh: {}, lock_owner: {}, start: {}, \
+            end: {}, typ: {}, pid: {})",
+            ino,
+            fh,
+            lock_owner,
+            start,
+            end,
+            typ,
+            pid
+        );
+        reply.error(libc::ENOSYS);
+    }
+
+    fn setlk(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        lock_owner: u64,
+        start: u64,
+        end: u64,
+        typ: i32,
+        pid: u32,
+        sleep: bool,
+        reply: ReplyEmpty
+    ) {
+        debug!(
+            "[Not Implemented] setlk(ino: {:#x?}, fh: {}, lock_owner: {}, start: {}, \
+            end: {}, typ: {}, pid: {}, sleep: {})",
+            ino,
+            fh,
+            lock_owner,
+            start,
+            end,
+            typ,
+            pid,
+            sleep
+        );
+        reply.error(libc::ENOSYS);
+    }
+
+    fn bmap(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        blocksize: u32,
+        idx: u64,
+        reply: fuser::ReplyBmap
+    ) {
+        debug!("[Not Implemented] bmap(ino: {:#x?}, blocksize: {}, idx: {})", ino, blocksize, idx);
+        reply.error(libc::ENOSYS);
+    }
+
+    fn ioctl(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        flags: u32,
+        cmd: u32,
+        in_data: &[u8],
+        out_size: u32,
+        reply: fuser::ReplyIoctl
+    ) {
+        debug!(
+            "[Not Implemented] ioctl(ino: {:#x?}, fh: {}, flags: {}, cmd: {}, \
+            in_data.len(): {}, out_size: {})",
+            ino,
+            fh,
+            flags,
+            cmd,
+            in_data.len(),
+            out_size
+        );
+        reply.error(libc::ENOSYS);
+    }
+
+    fn lseek(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        whence: i32,
+        reply: fuser::ReplyLseek
+    ) {
+        debug!(
+            "[Not Implemented] lseek(ino: {:#x?}, fh: {}, offset: {}, whence: {})",
+            ino,
+            fh,
+            offset,
+            whence
+        );
+        reply.error(libc::ENOSYS);
+    }
 }
 
 pub fn check_access(
@@ -1986,7 +2144,7 @@ fn main() {
         3 => LevelFilter::Debug,
         _ => LevelFilter::Trace,
     };
-    env_logger::builder().format_timestamp_nanos().filter_level(log_level).init();
+    env_logger::builder().format_timestamp_nanos().filter_level(log_level).init(); // Log 只是 facade, env_logger 是实现, 里面会引用 log
 
     let mut options = vec![MountOption::FSName("fuser".to_string())];
 
@@ -2015,6 +2173,7 @@ fn main() {
 
     let mountpoint: String = matches.get_one::<String>("mount-point").unwrap().to_string();
 
+    // 这个 fuser::mount2 好像是 阻塞的
     let result = fuser::mount2(
         SimpleFS::new(data_dir, matches.get_flag("direct-io"), matches.get_flag("suid")),
         mountpoint,
