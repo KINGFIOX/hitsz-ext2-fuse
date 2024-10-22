@@ -1938,36 +1938,44 @@ fn main() {
     let matches = Command::new("Fuser")
         .author("Christopher Berner")
         .arg(
-            Arg::new("data-dir")
+            Arg::new("data-dir") // --data-dir <DIR> 指定用于存储数据的本地目录, 默认是 /tmp/fuser
                 .long("data-dir")
                 .value_name("DIR")
                 .default_value("/tmp/fuser")
                 .help("Set local directory used to store data")
         )
         .arg(
-            Arg::new("mount-point")
+            Arg::new("mount-point") // --mount-point <MOUNT_POINT>
                 .long("mount-point")
                 .value_name("MOUNT_POINT")
                 .default_value("")
                 .help("Act as a client, and mount FUSE at given path")
         )
         .arg(
-            Arg::new("direct-io")
+            Arg::new("direct-io") // --direct-io
                 .long("direct-io")
-                .action(ArgAction::SetTrue)
-                .requires("mount-point")
+                .action(ArgAction::SetTrue) // 这是一个 Bool 标志, 如果有 --direct-io 参数, 则设置为 true
+                .requires("mount-point") // 这个参数, 依赖于 --mount-point <MOUNT_POINT>
                 .help("Mount FUSE with direct IO")
         )
         .arg(
-            Arg::new("fsck").long("fsck").action(ArgAction::SetTrue).help("Run a filesystem check")
+            Arg::new("fsck")
+                .long("fsck") // --fsck
+                .action(ArgAction::SetTrue)
+                .help("Run a filesystem check")
         )
         .arg(
             Arg::new("suid")
-                .long("suid")
+                .long("suid") // --suid
                 .action(ArgAction::SetTrue)
                 .help("Enable setuid support when run as root")
         )
-        .arg(Arg::new("v").short('v').action(ArgAction::Count).help("Sets the level of verbosity"))
+        .arg(
+            Arg::new("v")
+                .short('v') // -v
+                .action(ArgAction::Count) // -vv -vvv, 更高的日志等级
+                .help("Sets the level of verbosity")
+        )
         .get_matches();
 
     let verbosity = matches.get_count("v");
