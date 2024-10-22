@@ -3,10 +3,6 @@
 
 use clap::{ Arg, ArgAction, Command };
 use fuser::consts::FOPEN_DIRECT_IO;
-#[cfg(feature = "abi-7-26")]
-use fuser::consts::FUSE_HANDLE_KILLPRIV;
-// #[cfg(feature = "abi-7-31")]
-// use fuser::consts::FUSE_WRITE_KILL_PRIV;
 use fuser::TimeOrNow::Now;
 use fuser::{
     Filesystem,
@@ -26,8 +22,6 @@ use fuser::{
     TimeOrNow,
     FUSE_ROOT_ID,
 };
-#[cfg(feature = "abi-7-26")]
-use log::info;
 use log::{ debug, warn };
 use log::{ error, LevelFilter };
 use serde::{ Deserialize, Serialize };
@@ -274,23 +268,11 @@ impl SimpleFS {
         direct_io: bool,
         #[allow(unused_variables)] suid_support: bool
     ) -> SimpleFS {
-        #[cfg(feature = "abi-7-26")]
-        {
-            SimpleFS {
-                data_dir,
-                next_file_handle: AtomicU64::new(1),
-                direct_io,
-                suid_support,
-            }
-        }
-        #[cfg(not(feature = "abi-7-26"))]
-        {
-            SimpleFS {
-                data_dir,
-                next_file_handle: AtomicU64::new(1),
-                direct_io,
-                suid_support: false,
-            }
+        SimpleFS {
+            data_dir,
+            next_file_handle: AtomicU64::new(1),
+            direct_io,
+            suid_support: false,
         }
     }
 
@@ -475,9 +457,6 @@ impl Filesystem for SimpleFS {
         _req: &Request,
         #[allow(unused_variables)] config: &mut KernelConfig
     ) -> Result<(), c_int> {
-        #[cfg(feature = "abi-7-26")]
-        config.add_capabilities(FUSE_HANDLE_KILLPRIV).unwrap();
-
         fs::create_dir_all(Path::new(&self.data_dir).join("inodes")).unwrap();
         fs::create_dir_all(Path::new(&self.data_dir).join("contents")).unwrap();
         if self.get_inode(FUSE_ROOT_ID).is_err() {
@@ -2154,19 +2133,8 @@ fn main() {
 
     let mut options = vec![MountOption::FSName("fuser".to_string())];
 
-    #[cfg(feature = "abi-7-26")]
-    {
-        if matches.get_flag("suid") {
-            info!("setuid bit support enabled");
-            options.push(MountOption::Suid);
-        } else {
-            options.push(MountOption::AutoUnmount);
-        }
-    }
-    #[cfg(not(feature = "abi-7-26"))]
-    {
-        options.push(MountOption::AutoUnmount);
-    }
+    options.push(MountOption::AutoUnmount);
+
     if let Ok(enabled) = fuse_allow_other_enabled() {
         if enabled {
             options.push(MountOption::AllowOther);

@@ -14,4 +14,3 @@ serde = { version = "1.0.210", features = ["derive"] }
 
 [features]
 default = []
-abi-7-26 = []
