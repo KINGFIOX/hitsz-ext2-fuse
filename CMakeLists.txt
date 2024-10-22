@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 project(xv6fuse VERSION 1.22.0 LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -12,6 +12,9 @@ pkg_check_modules(FUSE REQUIRED fuse)
 message("FUSE_LIBRARIES ${FUSE_LIBRARIES}")
 
 add_definitions(${FUSE_CFLAGS_OTHER})
+add_compile_definitions(_FILE_OFFSET_BITS=64)
+add_compile_options(-Wall -Werror)
+
 
 include_directories(
     ${FUSE_INCLUDE_DIRS}
