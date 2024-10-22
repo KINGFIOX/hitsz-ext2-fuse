@@ -20,9 +20,16 @@
             llvm_16
             fuse
             cmake
+            ninja
+            gcc
           ];
           MAKEFLAGS = "-j$(nproc)";
         };
+
+        shellHook = ''
+          export CC=gcc
+          export CXX=g++
+        '';
       });
 }
 
