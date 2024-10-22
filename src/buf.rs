@@ -1,8 +1,8 @@
 use super::*;
 use common::*;
 
-use std::borrow::BorrowMut;
-use std::collections::{ BTreeMap, BTreeSet, HashSet };
+use std::collections::{ BTreeMap, HashSet };
+use std::hash::Hash;
 use std::sync::{ MutexGuard, Mutex };
 use std::time::SystemTime;
 
@@ -17,6 +17,12 @@ struct Buf {
     /// LRU cache list
     data: [u8; BSIZE],
     lock: Mutex<()>,
+}
+
+impl Hash for Buf {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        todo!()
+    }
 }
 
 impl Default for Buf {
@@ -69,10 +75,14 @@ impl BufCache {
         let Some(entry) = self.freelist.pop_first() else {
             panic!("bget: no free buffers");
         };
-        let buf = entry.1;
+        let mut buf = entry.1;
         buf.valid = false;
         buf.refcnt = 1;
         buf._dev = dev;
         buf.blockno = blockno;
+        self.cached.insert(buf);
+        drop(bcache_lk);
+        let buf_lk = buf.lock.lock().unwrap();
+        return (&buf, buf_lk);
     }
 }
