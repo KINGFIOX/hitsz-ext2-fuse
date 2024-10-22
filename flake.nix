@@ -19,21 +19,16 @@
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
       in {
         devShell = pkgs.mkShell {
-          buildInputs = (with pkgs; [
-            # pkg-config 用于管理: 编译、链接时所需库的路径
-            pkg-config
-            clang_16
-            llvm_16
-            libxml2
-          ]) ++ [
-            # Mold Linker for faster builds (only on Linux)
-            (lib.optionals pkgs.stdenv.isLinux pkgs.mold)
-          ] ++ [
-            # rust
-            # pkgs.rust-analyzer-unwrapped
-            pkgs.cargo-insta
-            toolchain
-          ];
+          buildInputs =
+            (with pkgs; [ pkg-config clang_16 llvm_16 libxml2 fuse ]) ++ [
+              # Mold Linker for faster builds (only on Linux)
+              (lib.optionals pkgs.stdenv.isLinux pkgs.mold)
+            ] ++ [
+              # rust
+              # pkgs.rust-analyzer-unwrapped
+              pkgs.cargo-insta
+              toolchain
+            ];
           RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
         };
       });
