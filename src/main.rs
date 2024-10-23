@@ -47,6 +47,8 @@ pub mod inode;
 
 pub mod common;
 
+pub mod trans; // 事务
+
 // Stores inode metadata data in "$data_dir/inodes" and file contents in "$data_dir/contents"
 // Directory data is stored in the file's contents, as a serialized DirectoryDescriptor
 struct SimpleFS {

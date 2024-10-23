@@ -9,21 +9,21 @@ use std::time::UNIX_EPOCH;
 #[derive(Serialize, Deserialize)]
 pub struct SuperBlock {
     /// Must be FSMAGIC
-    magic: u32,
+    pub magic: u32,
     /// Size of file system image (blocks)
-    size: u32,
+    pub size: u32,
     /// Number of data blocks
-    nblocks: u32,
+    pub nblocks: u32,
     /// Number of inodes.
-    ninodes: u32,
+    pub ninodes: u32,
     /// Number of log blocks
-    nlog: u32,
+    pub nlog: u32,
     /// Block number of first log block
-    logstart: u32,
+    pub logstart: u32,
     /// Block number of first inode block
-    inodestart: u32,
+    pub inodestart: u32,
     /// Block number of first free map block
-    bmapstart: u32,
+    pub bmapstart: u32,
 }
 
 #[repr(i16)]

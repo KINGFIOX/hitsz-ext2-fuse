@@ -1,88 +1,84 @@
 use super::*;
 use common::*;
 
-use std::collections::{ BTreeMap, HashSet };
-use std::hash::Hash;
-use std::sync::{ MutexGuard, Mutex };
-use std::time::SystemTime;
+use std::collections::HashMap;
 
-struct Buf {
+pub struct Buffer {
     /// has data been read from disk?
-    valid: bool,
+    pub valid: bool,
     /// does disk "own" buf?
-    _disk: i32,
-    _dev: u32,
-    blockno: u32,
+    pub _disk: i32,
+    pub _dev: u32,
+    pub blockno: u32,
     refcnt: u32,
     /// LRU cache list
-    data: [u8; BSIZE],
-    lock: Mutex<()>,
+    pub data: [u8; BSIZE],
 }
 
-impl Hash for Buf {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        todo!()
-    }
-}
-
-impl Default for Buf {
+impl Default for Buffer {
     fn default() -> Self {
-        Buf {
+        Buffer {
             valid: false,
             _disk: 0,
             _dev: 0,
             blockno: 0,
             refcnt: 0,
             data: [0; BSIZE],
-            lock: Mutex::default(),
         }
     }
 }
 
-struct BufCache {
-    cached: HashSet<Buf>,
-    freelist: BTreeMap<SystemTime, Buf>,
-    lock: Mutex<()>,
+impl Buffer {
+    pub fn bpin(&mut self) {
+        self.refcnt += 1;
+    }
+    pub fn bunpin(&mut self) {
+        self.refcnt -= 1; // 如果 < 0 自然会报错的
+    }
+}
+
+pub struct BufCache {
+    pub cached: HashMap<(u32 /* dev */, u32 /* blockno */), Buffer>,
 }
 
 impl Default for BufCache {
     fn default() -> Self {
-        let mut freelist = BTreeMap::new();
-        for _ in 0..NBUF {
-            let buf = Buf::default();
-            freelist.insert(SystemTime::now(), buf);
-        }
         BufCache {
-            cached: HashSet::new(),
-            freelist,
-            lock: Mutex::default(),
+            cached: HashMap::new(),
         }
     }
 }
 
 impl BufCache {
-    fn bget(&mut self, dev: u32, blockno: u32) -> (&Buf, MutexGuard<()>) {
-        let bcache_lk = self.lock.lock().unwrap();
-        for buf in self.cached.iter() {
-            if buf._dev == dev && buf.blockno == blockno {
-                buf.refcnt += 1;
-                drop(bcache_lk);
-                let buf_lk = buf.lock.lock().unwrap();
-                return (buf, buf_lk);
-            }
-        }
-
-        let Some(entry) = self.freelist.pop_first() else {
-            panic!("bget: no free buffers");
-        };
-        let mut buf = entry.1;
-        buf.valid = false;
-        buf.refcnt = 1;
+    fn bget(&mut self, dev: u32, blockno: u32) -> &mut Buffer {
+        let buf = self.cached.entry((dev, blockno)).or_default();
+        // b.valid = false;
+        // b._disk = 0;
         buf._dev = dev;
         buf.blockno = blockno;
-        self.cached.insert(buf);
-        drop(bcache_lk);
-        let buf_lk = buf.lock.lock().unwrap();
-        return (&buf, buf_lk);
+        buf.refcnt += 1; // buf.refcnt = 1;
+        return buf;
+    }
+
+    pub fn bread(&mut self, dev: u32, blockno: u32) -> &mut Buffer {
+        let buf = self.bget(dev, blockno);
+        if !buf.valid {
+            // TODO read from disk
+            buf.valid = true;
+        }
+        return buf;
+    }
+
+    #[allow(unused_variables)]
+    pub fn bwrite(buf: &mut Buffer) {
+        // TODO write to disk
+    }
+
+    pub fn brelse(&mut self, buf: &mut Buffer) {
+        buf.refcnt -= 1;
+        let refcnt = buf.refcnt;
+        if refcnt == 0 {
+            self.cached.remove(&(buf._dev, buf.blockno)); // drop(buf)
+        }
     }
 }
