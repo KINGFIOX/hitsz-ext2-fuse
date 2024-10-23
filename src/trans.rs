@@ -1,6 +1,4 @@
-use std::borrow::BorrowMut;
 use std::ptr;
-use std::sync::{ Arc, Mutex };
 
 use super::*;
 use common::*;
@@ -83,6 +81,29 @@ impl Trans {
         }
     }
 
+    // write to log
+    fn write_log(&self, bcache: &mut BufCache) {
+        let bcache_ptr = bcache as *mut BufCache; // 毁灭吧
+        for i in 0..self.log_hdr.n {
+            let to = unsafe {
+                (&mut *bcache_ptr).bread(self.dev as u32, (self.start + i + 1) as u32)
+            };
+            let from = unsafe {
+                (&mut *bcache_ptr).bread(self.dev as u32, self.log_hdr.block[i as usize] as u32)
+            };
+            unsafe {
+                ptr::copy(from.data.as_ptr(), to.data.as_mut_ptr(), BSIZE as usize);
+            }
+            BufCache::bwrite(to);
+            unsafe {
+                (&mut *bcache_ptr).brelse(from);
+            }
+            unsafe {
+                (&mut *bcache_ptr).brelse(to);
+            }
+        }
+    }
+
     fn recover_from_log(&mut self, bcache: &mut BufCache) {
         self.read_head(bcache);
         self.install_trans(bcache);
@@ -101,5 +122,55 @@ impl Trans {
                 break;
             }
         }
+    }
+
+    fn end_op(&mut self, bcache: &mut BufCache) {
+        let mut do_commit = false;
+        self.outstanding -= 1;
+        assert!(self.committing == false);
+        if self.outstanding == 0 {
+            do_commit = true;
+            self.committing = true;
+        } else {
+            // TODO      wakeup(&log);
+        }
+
+        if do_commit {
+            self.commit(bcache);
+            self.committing = false;
+            // TODO     wakeup(&log);
+        }
+    }
+
+    fn commit(&mut self, bcache: &mut BufCache) {
+        if self.log_hdr.n > 0 {
+            self.write_log(bcache);
+            self.write_head(bcache);
+            self.install_trans(bcache);
+            self.log_hdr.n = 0;
+            self.write_head(bcache);
+        }
+    }
+
+    /// Caller has modified b->data and is done with the buffer.
+    /// Record the block number and pin in the cache by increasing refcnt.
+    /// commit()/write_log() will do the disk write.
+    ///
+    /// log_write() replaces bwrite(); a typical use is:
+    ///   bp = bread(...)
+    ///   modify bp->data[]
+    ///   log_write(bp)
+    ///   brelse(bp)
+    fn log_write(&mut self, bfu: &mut Buffer) {
+        assert!(self.log_hdr.n < (LOGSIZE as i32) && self.log_hdr.n < self.size);
+        assert!(self.outstanding >= 1);
+        for i in 0..self.log_hdr.n {
+            if self.log_hdr.block[i as usize] == (bfu.blockno as i32) {
+                self.log_hdr.block[i as usize] = bfu.blockno as i32;
+                return;
+            }
+        }
+        self.log_hdr.block[self.log_hdr.n as usize] = bfu.blockno as i32;
+        self.log_hdr.n += 1;
     }
 }
