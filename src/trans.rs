@@ -2,7 +2,7 @@ use std::ptr;
 
 use super::*;
 use common::*;
-use inode::SuperBlock;
+use fs::SuperBlock;
 use buf::*;
 
 #[derive(Default)]
@@ -11,7 +11,7 @@ struct LogHeader {
     block: [i32; LOGSIZE],
 }
 
-struct Trans {
+pub struct Trans {
     start: i32,
     size: i32,
     /// how many FS sys calls are executing.
@@ -161,16 +161,16 @@ impl Trans {
     ///   modify bp->data[]
     ///   log_write(bp)
     ///   brelse(bp)
-    fn log_write(&mut self, bfu: &mut Buffer) {
+    pub fn log_write(&mut self, buf: &mut Buffer) {
         assert!(self.log_hdr.n < (LOGSIZE as i32) && self.log_hdr.n < self.size);
         assert!(self.outstanding >= 1);
         for i in 0..self.log_hdr.n {
-            if self.log_hdr.block[i as usize] == (bfu.blockno as i32) {
-                self.log_hdr.block[i as usize] = bfu.blockno as i32;
+            if self.log_hdr.block[i as usize] == (buf.blockno as i32) {
+                self.log_hdr.block[i as usize] = buf.blockno as i32;
                 return;
             }
         }
-        self.log_hdr.block[self.log_hdr.n as usize] = bfu.blockno as i32;
+        self.log_hdr.block[self.log_hdr.n as usize] = buf.blockno as i32;
         self.log_hdr.n += 1;
     }
 }
