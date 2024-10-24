@@ -3,7 +3,6 @@ use blk_dev::BlockDevice;
 
 use std::sync::{Arc, Mutex, Weak};
 
-#[allow(unused)]
 pub struct BlockCache {
     cache: [u8; BLOCK_SZ],
     blockno: usize,
@@ -16,12 +15,11 @@ impl BlockCache {
         self.blockno
     }
 
-    #[allow(unused)]
     pub fn block_device(&self) -> Arc<dyn BlockDevice> {
         Arc::clone(&self.block_device)
     }
 
-    pub fn memmove(dst: &mut Self, src: &mut Self) {
+    pub fn memmove(dst: &mut Self, src: &Self) {
         dst.cache.copy_from_slice(src.cache.as_ref());
     }
 
@@ -40,7 +38,6 @@ impl BlockCache {
         &self.cache[offset] as *const _ as usize
     }
 
-    #[allow(unused)]
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,
@@ -51,7 +48,6 @@ impl BlockCache {
         unsafe { &*(addr as *const T) }
     }
 
-    #[allow(unused)]
     pub fn get_mut<T>(&mut self, offset: usize) -> &mut T
     where
         T: Sized,
@@ -80,7 +76,6 @@ impl BlockCacheManager {
         Self(Vec::new())
     }
 
-    #[allow(unused)]
     pub fn get_block_cache(
         &mut self,
         blockno: usize,
