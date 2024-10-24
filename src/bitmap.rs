@@ -43,7 +43,19 @@ impl BitMap {
             let cache = guard.cache_mut();
             if cache[byte] & mask == 0 {
                 cache[byte] |= mask;
-                log_mgr.lock().unwrap().log_write(bno, block_cache.clone());
+                log_mgr
+                    .lock()
+                    .unwrap()
+                    .log_write(self.start + bi, block_cache.clone()); // 这个要与上面 get_block_cache 保持一致
+                let dst = blk_cch_mgr
+                    .lock()
+                    .unwrap()
+                    .get_block_cache(bno, self.blk_dev.clone());
+                let mut dst_guard = dst.lock().unwrap();
+                *dst_guard.cache_mut() = [0u8; BSIZE];
+                log_mgr.lock().unwrap().log_write(bno, dst.clone());
+                // brelse(bp);
+                // brelse(dst);
                 return Some(bno);
             }
         }
