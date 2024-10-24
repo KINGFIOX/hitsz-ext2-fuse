@@ -6,7 +6,7 @@ use super::*;
 
 #[allow(unused)]
 #[repr(C)]
-struct SuperBlock {
+pub struct SuperBlock {
     /// Must be FSMAGIC
     magic: u32,
     /// Size of file system image (blocks)
@@ -27,7 +27,7 @@ struct SuperBlock {
 
 #[allow(unused)]
 #[repr(i16)]
-enum FileKind {
+pub enum FileKind {
     Invalid = 0,
     Directory = 1,
     File = 2,
@@ -59,6 +59,16 @@ impl DiskInode {
 
     pub fn bnos_mut(&mut self) -> &mut [u32; NDIRECT + 1] {
         &mut self.bnos
+    }
+
+    #[allow(unused)]
+    pub fn n_link(&self) -> i16 {
+        self.n_link
+    }
+
+    #[allow(unused)]
+    pub fn n_link_mut(&mut self) -> &mut i16 {
+        &mut self.n_link
     }
 }
 

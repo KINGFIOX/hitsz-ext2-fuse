@@ -4,6 +4,7 @@ mod block_device; // Cache for block devices
 mod disk;
 mod logger;
 mod vfs;
+mod xv6fs;
 
 pub const BSIZE: usize = 1024;
 

@@ -4,6 +4,7 @@ use block_cache::BlockCacheManager;
 use block_device::BlockDevice;
 use disk::DiskInode;
 use logger::LogManager;
+use xv6fs::XV6FS;
 
 use std::sync::{Arc, Mutex, Weak};
 
@@ -11,7 +12,25 @@ use std::sync::{Arc, Mutex, Weak};
 pub struct Inode {
     ino: usize,
     blk_dev: Arc<dyn BlockDevice>,
+    fs: Arc<XV6FS>,
     disk_inode: DiskInode,
+}
+
+impl Drop for Inode {
+    fn drop(&mut self) {
+        if self.disk_inode.n_link() == 0 {
+            // begin_op();
+            let bitmap = self.fs.bitmap();
+            let blk_cch_mgr = self.fs.blk_cch_mgr();
+            let log_mgr = self.fs.log_mgr();
+            self.itrunc();
+            bitmap
+                .lock()
+                .unwrap()
+                .dealloc(self.ino, blk_cch_mgr, log_mgr);
+            // end_op();
+        }
+    }
 }
 
 pub struct InodeManager(Vec<(usize /* ino */, Weak<Mutex<Inode>>)>);
@@ -51,12 +70,10 @@ impl Inode {
     ///
     /// # warning
     /// should be enveloped by begin_op() and end_op()
-    pub fn itrunc(
-        &mut self,
-        bitmap: Arc<Mutex<BitMap>>,
-        blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
-        log_mgr: Arc<Mutex<LogManager>>,
-    ) {
+    pub fn itrunc(&mut self) {
+        let bitmap = self.fs.bitmap();
+        let blk_cch_mgr = self.fs.blk_cch_mgr();
+        let log_mgr = self.fs.log_mgr();
         for i in 0..NDIRECT {
             if self.disk_inode.bnos()[i] != 0 {
                 bfree(
@@ -105,13 +122,10 @@ impl Inode {
     ///
     /// # warning
     /// should be enveloped by begin_op() and end_op()
-    fn bmap(
-        &mut self,
-        bno_logi: usize,
-        bitmap: Arc<Mutex<BitMap>>,
-        blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
-        log_mgr: Arc<Mutex<LogManager>>,
-    ) -> Option<usize> {
+    fn bmap(&mut self, bno_logi: usize) -> Option<usize> {
+        let bitmap = self.fs.bitmap();
+        let blk_cch_mgr = self.fs.blk_cch_mgr();
+        let log_mgr = self.fs.log_mgr();
         if bno_logi < NDIRECT {
             let bno_abs = self.disk_inode.bnos()[bno_logi] as usize;
             if bno_abs == 0 {
