@@ -1,3 +1,9 @@
+//! log, a typical use is:
+//!   bp = bread(...)
+//!   modify bp->data[]
+//!   log_write(bp)
+//!   brelse(bp)
+
 use super::*;
 use blk_cch::{BlockCache, BlockCacheManager};
 use blk_dev::BlockDevice;
@@ -8,6 +14,8 @@ pub struct LogManager {
     start: usize,
     size: usize,
     outstanding: usize,
+    /// device of log_hdr
+    blk_dev: Arc<dyn BlockDevice>,
     table: Vec<(usize /* blockno */, Arc<Mutex<BlockCache>>)>,
 }
 
@@ -15,7 +23,7 @@ pub struct LogManager {
 #[repr(C)]
 struct LogHeader {
     n: i32,
-    blocks: [i32; BLOCK_SZ], //  blockno
+    blocks: [i32; LOGSIZE], //  blockno
 }
 
 impl LogManager {
@@ -36,15 +44,11 @@ impl LogManager {
     }
 
     /// log_mgr.table(mem) -> log_hdr(disk)
-    fn write_head(
-        &self,
-        blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
-        blk_dev: Arc<dyn BlockDevice>,
-    ) {
+    fn write_head(&self, blk_cch_mgr: Arc<Mutex<BlockCacheManager>>) {
         let block_cache = blk_cch_mgr
             .lock()
             .unwrap()
-            .get_block_cache(self.start, blk_dev);
+            .get_block_cache(self.start, self.blk_dev.clone());
         let mut _guard_log_hdr_disk = block_cache.lock().unwrap();
         let log_hdr = _guard_log_hdr_disk.get_mut::<LogHeader>(0);
         for i in 0..log_hdr.n {
@@ -71,17 +75,13 @@ impl LogManager {
         }
     }
 
-    fn commit(
-        &mut self,
-        blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
-        blk_dev: Arc<dyn BlockDevice>,
-    ) {
+    fn commit(&mut self, blk_cch_mgr: Arc<Mutex<BlockCacheManager>>) {
         if !self.table.is_empty() {
             self.write_log(blk_cch_mgr.clone());
-            self.write_head(blk_cch_mgr.clone(), blk_dev.clone());
+            self.write_head(blk_cch_mgr.clone());
             self.install_trans(blk_cch_mgr.clone());
             self.table.clear();
-            self.write_head(blk_cch_mgr.clone(), blk_dev.clone());
+            self.write_head(blk_cch_mgr.clone());
         }
     }
 }
@@ -99,6 +99,7 @@ impl LogManager {
             start,
             size,
             outstanding: 0,
+            blk_dev: blk_dev.clone(),
             table: Vec::new(),
         };
 
@@ -119,7 +120,7 @@ impl LogManager {
 
         log_mgr.install_trans(blk_cch_mgr.clone());
         log_mgr.table.clear();
-        log_mgr.write_head(blk_cch_mgr.clone(), blk_dev.clone());
+        log_mgr.write_head(blk_cch_mgr.clone());
 
         log_mgr
     }
@@ -153,12 +154,11 @@ impl LogManager {
         this: Arc<Mutex<Self>>,
         cv: Arc<Condvar>,
         blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
-        blk_dev: Arc<dyn BlockDevice>,
     ) {
         let mut guard = this.lock().unwrap();
         guard.outstanding -= 1;
         if guard.outstanding == 0 {
-            guard.commit(blk_cch_mgr, blk_dev);
+            guard.commit(blk_cch_mgr);
             cv.notify_all();
         }
     }
