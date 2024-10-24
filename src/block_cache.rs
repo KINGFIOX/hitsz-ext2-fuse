@@ -10,9 +10,12 @@ pub struct BlockCache {
 }
 
 impl BlockCache {
-    #[allow(unused)]
     pub fn blockno(&self) -> usize {
         self.blockno
+    }
+
+    pub fn cache_mut(&mut self) -> &mut [u8; BSIZE] {
+        &mut self.cache
     }
 
     pub fn block_device(&self) -> Arc<dyn BlockDevice> {
@@ -59,7 +62,7 @@ impl BlockCache {
     }
 
     /// block(mem) -> block(disk). Write the BlockCache to disk.
-    #[allow(unused)]
+    /// should not be called directly, use log_write instead
     pub fn write(&self) {
         self.blk_dev.write_block(self.blockno, &self.cache);
     }
