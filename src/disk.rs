@@ -28,15 +28,16 @@ struct SuperBlock {
 #[allow(unused)]
 #[repr(i16)]
 enum FileKind {
-    Unknown = 0,
+    Invalid = 0,
     Directory = 1,
     File = 2,
     Device = 3,
 }
 
+/// inode on disk
 #[allow(unused)]
 #[repr(C)]
-struct DInode {
+pub struct DiskInode {
     /// File type
     kind: FileKind,
     /// Major device number (T_DEVICE only)

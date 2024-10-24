@@ -94,7 +94,7 @@ impl LogManager {
         blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
         blk_dev: Arc<dyn BlockDevice>,
     ) -> Self {
-        assert!(size_of::<LogHeader>() <= BLOCK_SZ);
+        assert!(size_of::<LogHeader>() <= BSIZE);
         let mut log_mgr = LogManager {
             start,
             size,

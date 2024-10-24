@@ -4,7 +4,7 @@ use blk_dev::BlockDevice;
 use std::sync::{Arc, Mutex, Weak};
 
 pub struct BlockCache {
-    cache: [u8; BLOCK_SZ],
+    cache: [u8; BSIZE],
     blockno: usize,
     block_device: Arc<dyn BlockDevice>,
 }
@@ -25,7 +25,7 @@ impl BlockCache {
 
     /// block(disk) -> block(mem). Load a new BlockCache from disk.
     pub fn new(blockno: usize, block_device: Arc<dyn BlockDevice>) -> Self {
-        let mut cache = [0u8; BLOCK_SZ];
+        let mut cache = [0u8; BSIZE];
         block_device.read_block(blockno, &mut cache);
         Self {
             cache,
@@ -43,7 +43,7 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        assert!(offset + type_size <= BLOCK_SZ);
+        assert!(offset + type_size <= BSIZE);
         let addr = self.addr_of_offset(offset);
         unsafe { &*(addr as *const T) }
     }
@@ -53,7 +53,7 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        assert!(offset + type_size <= BLOCK_SZ);
+        assert!(offset + type_size <= BSIZE);
         let addr = self.addr_of_offset(offset);
         unsafe { &mut *(addr as *mut T) }
     }
