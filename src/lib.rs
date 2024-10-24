@@ -19,3 +19,5 @@ pub const ROOTINO: usize = 1; // root i-number
 pub const NINODES: usize = 200; // number of inodes
 
 pub const DIRSIZ: usize = 14;
+
+pub const BPB: usize = BSIZE * 8; // bit per bitmap
