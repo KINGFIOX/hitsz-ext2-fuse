@@ -2,7 +2,7 @@ use super::*;
 use bitmap::BitMap;
 use block_cache::BlockCacheManager;
 use block_device::BlockDevice;
-use disk::DiskInode;
+use disk::{DiskInode, SuperBlock};
 use logger::LogManager;
 use xv6fs::XV6FS;
 
@@ -66,6 +66,24 @@ impl Inode {
     }
 
     #[allow(unused)]
+    pub fn iupdate(&mut self) {
+        let log_mgr = self.fs.log_mgr();
+        let blk_cch_mgr = self.fs.blk_cch_mgr();
+        let block = blk_cch_mgr.lock().unwrap().get_block_cache(
+            Inode::ino2blk(self.ino, self.fs.super_blk()),
+            self.blk_dev.clone(),
+        );
+        let blk_guard = block.lock().unwrap();
+
+        todo!()
+
+        // log_mgr
+        //     .lock()
+        //     .unwrap()
+        //     .write(self.ino, self.blk_dev.get_block_cache(self.ino));
+    }
+
+    #[allow(unused)]
     /// Truncate inode (discard contents), excluding the meta_data of the inode itself.
     ///
     /// # warning
@@ -116,6 +134,10 @@ impl Inode {
 }
 
 impl Inode {
+    fn ino2blk(ino: usize, sb: &SuperBlock) -> usize {
+        ino / IPB + sb.inode_start()
+    }
+
     #[allow(unused)]
     /// logical block number(for a file) -> absolute block number(for the disk).
     /// if the block is not allocated, allocate it.

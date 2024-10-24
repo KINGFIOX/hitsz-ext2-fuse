@@ -25,6 +25,12 @@ pub struct SuperBlock {
     bmapstart: u32,
 }
 
+impl SuperBlock {
+    pub fn inode_start(&self) -> usize {
+        self.inode_start as usize
+    }
+}
+
 #[allow(unused)]
 #[repr(i16)]
 pub enum FileKind {

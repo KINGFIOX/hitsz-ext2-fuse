@@ -22,3 +22,6 @@ pub const NINODES: usize = 200; // number of inodes
 pub const DIRSIZ: usize = 14;
 
 pub const BPB: usize = BSIZE * 8; // bit per bitmap
+
+use disk::DiskInode;
+pub const IPB: usize = BSIZE / size_of::<DiskInode>();
