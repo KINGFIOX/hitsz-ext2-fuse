@@ -22,13 +22,17 @@ impl BitMap {
         }
     }
 
-    #[allow(unused)]
+    pub fn blk_dev(&self) -> Arc<dyn BlockDevice> {
+        self.blk_dev.clone()
+    }
+
     /// should be enveloped by begin_op() and end_op()
     pub fn alloc(
         &self,
         blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
         log_mgr: Arc<Mutex<LogManager>>,
     ) -> Option<usize> {
+        // TODO 这里可以做的更快一些, 不必每次都 get_block_cache
         for bno in 0..self.blocks {
             let bi = bno / BPB; // segment
             let bj = bno % BPB; // offset
@@ -47,22 +51,14 @@ impl BitMap {
                     .lock()
                     .unwrap()
                     .log_write(self.start + bi, block_cache.clone()); // 这个要与上面 get_block_cache 保持一致
-                let dst = blk_cch_mgr
-                    .lock()
-                    .unwrap()
-                    .get_block_cache(bno, self.blk_dev.clone());
-                let mut dst_guard = dst.lock().unwrap();
-                *dst_guard.cache_mut() = [0u8; BSIZE];
-                log_mgr.lock().unwrap().log_write(bno, dst.clone());
+
                 // brelse(bp);
-                // brelse(dst);
                 return Some(bno);
             }
         }
         None
     }
 
-    #[allow(unused)]
     /// should be enveloped by begin_op() and end_op()
     pub fn dealloc(
         &self,
@@ -70,13 +66,15 @@ impl BitMap {
         blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
         log_mgr: Arc<Mutex<LogManager>>,
     ) {
+        let bi = bno / BPB;
+        let bj = bno % BPB;
         let block_cache = blk_cch_mgr
             .lock()
             .unwrap()
-            .get_block_cache(self.start + bno, self.blk_dev.clone());
+            .get_block_cache(self.start + bi, self.blk_dev.clone());
         let mut guard = block_cache.lock().unwrap();
-        let byte = bno / 8;
-        let bit = bno % 8;
+        let byte = bj / 8;
+        let bit = bj % 8;
         let mask = 1 << bit;
         let cache = guard.cache_mut();
         assert!(cache[byte] & mask != 0);
@@ -85,7 +83,7 @@ impl BitMap {
             log_mgr
                 .lock()
                 .unwrap()
-                .log_write(self.start + bno, block_cache.clone());
+                .log_write(self.start + bi, block_cache.clone());
         }
     }
 }

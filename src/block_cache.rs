@@ -10,9 +10,10 @@ pub struct BlockCache {
 }
 
 impl BlockCache {
-    pub fn blockno(&self) -> usize {
-        self.blockno
-    }
+    // #[allow(unused)]
+    // pub fn blockno(&self) -> usize {
+    //     self.blockno
+    // }
 
     pub fn cache_mut(&mut self) -> &mut [u8; BSIZE] {
         &mut self.cache

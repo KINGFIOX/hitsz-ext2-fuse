@@ -49,10 +49,18 @@ pub struct DiskInode {
     /// Size of file (bytes)
     size: u32,
     /// Data block addresses
-    addrs: [u32; NDIRECT + 1],
+    bnos: [u32; NDIRECT + 1],
 }
 
-impl DiskInode {}
+impl DiskInode {
+    pub fn bnos(&self) -> &[u32; NDIRECT + 1] {
+        &self.bnos
+    }
+
+    pub fn bnos_mut(&mut self) -> &mut [u32; NDIRECT + 1] {
+        &mut self.bnos
+    }
+}
 
 #[allow(unused)]
 #[repr(C)]
