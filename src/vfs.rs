@@ -22,6 +22,10 @@ impl Inode {
     }
 
     #[allow(unused)]
+    /// Truncate inode (discard contents).
+    ///
+    /// # warning
+    /// should be enveloped by begin_op() and end_op()
     pub fn itrunc(
         &mut self,
         bitmap: Arc<Mutex<BitMap>>,
@@ -94,7 +98,62 @@ impl InodeManager {
     }
 }
 
+impl Inode {
+    #[allow(unused)]
+    /// logical block number(for a file) -> absolute block number(for the disk).
+    /// if the block is not allocated, allocate it.
+    ///
+    /// # warning
+    /// should be enveloped by begin_op() and end_op()
+    fn bmap(
+        &mut self,
+        bno_logi: usize,
+        bitmap: Arc<Mutex<BitMap>>,
+        blk_cch_mgr: Arc<Mutex<BlockCacheManager>>,
+        log_mgr: Arc<Mutex<LogManager>>,
+    ) -> Option<usize> {
+        if bno_logi < NDIRECT {
+            let bno_abs = self.disk_inode.bnos()[bno_logi] as usize;
+            if bno_abs == 0 {
+                let bno_abs = balloc(bitmap.clone(), blk_cch_mgr.clone(), log_mgr.clone())?; // balloc may fail
+                self.disk_inode.bnos_mut()[bno_logi] = bno_abs as u32;
+                return Some(bno_abs);
+            }
+        }
+
+        let bno_logi = bno_logi - NDIRECT;
+        if bno_logi < NINDIRECT {
+            let bno_abs = self.disk_inode.bnos()[NDIRECT] as usize;
+            if bno_abs == 0 {
+                let bno_abs = balloc(bitmap.clone(), blk_cch_mgr.clone(), log_mgr.clone())?;
+                self.disk_inode.bnos_mut()[NDIRECT] = bno_abs as u32;
+            }
+
+            let indirect = blk_cch_mgr.lock().unwrap().get_block_cache(
+                self.disk_inode.bnos()[NDIRECT] as usize,
+                self.blk_dev.clone(),
+            );
+            let mut indirect_guard = indirect.lock().unwrap();
+            let indirect_cache = indirect_guard.get_mut::<[u32; NINDIRECT]>(0);
+            let bno_abs = indirect_cache[bno_logi] as usize;
+            if bno_abs == 0 {
+                let bno_abs = balloc(bitmap.clone(), blk_cch_mgr.clone(), log_mgr.clone())?;
+                indirect_cache[bno_logi] = bno_abs as u32;
+                log_mgr
+                    .lock()
+                    .unwrap()
+                    .write(self.disk_inode.bnos()[NDIRECT] as usize, indirect.clone());
+                return Some(bno_abs);
+            }
+            return Some(bno_abs);
+        }
+
+        panic!("bmap: out of range")
+    }
+}
+
 #[allow(unused)]
+/// # warning
 /// should be enveloped by begin_op() and end_op()
 fn bfree(
     bno: usize,
@@ -107,6 +166,7 @@ fn bfree(
 }
 
 #[allow(unused)]
+/// # warning
 /// should be enveloped by begin_op() and end_op()
 fn balloc(
     bitmap: Arc<Mutex<BitMap>>,
@@ -115,14 +175,12 @@ fn balloc(
 ) -> Option<usize> {
     let bitmap_clone = bitmap.clone();
     let bitmap_guard = bitmap_clone.lock().unwrap();
-    if let Some(bno) = bitmap_guard.alloc(blk_cch_mgr.clone(), log_mgr.clone()) {
-        bzero(bno, blk_cch_mgr, bitmap, log_mgr);
-        Some(bno)
-    } else {
-        None
-    }
+    let bno = bitmap_guard.alloc(blk_cch_mgr.clone(), log_mgr.clone())?;
+    bzero(bno, blk_cch_mgr, bitmap, log_mgr);
+    Some(bno)
 }
 
+/// # warning
 /// should be enveloped by begin_op() and end_op()
 fn bzero(
     bno: usize,
@@ -135,6 +193,6 @@ fn bzero(
     let dst = blk_cch_mgr.lock().unwrap().get_block_cache(bno, blk_dev);
     let mut dst_guard = dst.lock().unwrap();
     *dst_guard.cache_mut() = [0u8; BSIZE];
-    log_mgr.lock().unwrap().log_write(bno, dst.clone());
+    log_mgr.lock().unwrap().write(bno, dst.clone());
     // brelse(dst);
 }

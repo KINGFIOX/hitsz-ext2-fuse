@@ -26,6 +26,7 @@ impl BitMap {
         self.blk_dev.clone()
     }
 
+    /// # warning
     /// should be enveloped by begin_op() and end_op()
     pub fn alloc(
         &self,
@@ -50,7 +51,7 @@ impl BitMap {
                 log_mgr
                     .lock()
                     .unwrap()
-                    .log_write(self.start + bi, block_cache.clone()); // 这个要与上面 get_block_cache 保持一致
+                    .write(self.start + bi, block_cache.clone()); // 这个要与上面 get_block_cache 保持一致
 
                 // brelse(bp);
                 return Some(bno);
@@ -59,6 +60,7 @@ impl BitMap {
         None
     }
 
+    /// # warning
     /// should be enveloped by begin_op() and end_op()
     pub fn dealloc(
         &self,
@@ -83,7 +85,7 @@ impl BitMap {
             log_mgr
                 .lock()
                 .unwrap()
-                .log_write(self.start + bi, block_cache.clone());
+                .write(self.start + bi, block_cache.clone());
         }
     }
 }

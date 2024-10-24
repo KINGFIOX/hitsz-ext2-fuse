@@ -1,7 +1,7 @@
 //! log, a typical use is:
 //!   bp = bread(...)
 //!   modify bp->data[]
-//!   log_write(bp)
+//!   write(bp)
 //!   brelse(bp)
 
 use super::*;
@@ -129,9 +129,9 @@ impl LogManager {
     /// write entry to log_mgr.table(mem).
     /// WHEN COMMIT, data_blocks(disk) -> log_blocks(disk). according to log_mgr.table.
     /// and log_blocks(disk) -> data_blocks(disk).
-    pub fn log_write(&mut self, blockno: usize, block: Arc<Mutex<BlockCache>>) {
+    pub fn write(&mut self, blockno: usize, block: Arc<Mutex<BlockCache>>) {
         assert!(self.table.len() < self.size);
-        assert!(self.outstanding > 0); // log_write outside of transaction
+        assert!(self.outstanding > 0); // log_mgr.write outside of transaction
         if self.table.iter().any(|pair| pair.0 == blockno) {
             // log absorbtion
         } else {

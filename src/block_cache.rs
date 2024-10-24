@@ -63,7 +63,7 @@ impl BlockCache {
     }
 
     /// block(mem) -> block(disk). Write the BlockCache to disk.
-    /// should not be called directly, use log_write instead
+    /// should not be called directly, use log_mgr.write instead
     pub fn write(&self) {
         self.blk_dev.write_block(self.blockno, &self.cache);
     }
