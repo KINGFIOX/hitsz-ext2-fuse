@@ -5,8 +5,8 @@
 //!   brelse(bp)
 
 use super::*;
-use blk_cch::{BlockCache, BlockCacheManager};
-use blk_dev::BlockDevice;
+use block_cache::{BlockCache, BlockCacheManager};
+use block_device::BlockDevice;
 
 use std::sync::{Arc, Condvar, Mutex};
 

@@ -52,6 +52,8 @@ pub struct DiskInode {
     addrs: [u32; NDIRECT + 1],
 }
 
+impl DiskInode {}
+
 #[allow(unused)]
 #[repr(C)]
 struct DirEntry {

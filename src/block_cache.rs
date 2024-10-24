@@ -1,12 +1,12 @@
 use super::*;
-use blk_dev::BlockDevice;
+use block_device::BlockDevice;
 
 use std::sync::{Arc, Mutex, Weak};
 
 pub struct BlockCache {
     cache: [u8; BSIZE],
     blockno: usize,
-    block_device: Arc<dyn BlockDevice>,
+    blk_dev: Arc<dyn BlockDevice>,
 }
 
 impl BlockCache {
@@ -16,7 +16,7 @@ impl BlockCache {
     }
 
     pub fn block_device(&self) -> Arc<dyn BlockDevice> {
-        Arc::clone(&self.block_device)
+        Arc::clone(&self.blk_dev)
     }
 
     pub fn memmove(dst: &mut Self, src: &Self) {
@@ -30,7 +30,7 @@ impl BlockCache {
         Self {
             cache,
             blockno,
-            block_device,
+            blk_dev: block_device,
         }
     }
 
@@ -61,7 +61,7 @@ impl BlockCache {
     /// block(mem) -> block(disk). Write the BlockCache to disk.
     #[allow(unused)]
     pub fn write(&self) {
-        self.block_device.write_block(self.blockno, &self.cache);
+        self.blk_dev.write_block(self.blockno, &self.cache);
     }
 }
 

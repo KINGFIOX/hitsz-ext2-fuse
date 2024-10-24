@@ -1,0 +1,18 @@
+[
+  {
+    "arguments": [
+      "/nix/store/zznja5f8v3jafffyah1rk46vpfcn38dv-gcc-wrapper-13.3.0/bin/gcc",
+      "-c",
+      "-Wall",
+      "-I.",
+      "-I",
+      "/nix/store/n15bxkd7id2gvlwpihm4kp675aqkrwmj-glibc-2.40-36-dev/include",
+      "-o",
+      "mkfs/mkfs",
+      "mkfs/mkfs.c"
+    ],
+    "directory": "/home/wangfiox/Documents/xv6-oslab24-hitsz",
+    "file": "/home/wangfiox/Documents/xv6-oslab24-hitsz/mkfs/mkfs.c",
+    "output": "/home/wangfiox/Documents/xv6-oslab24-hitsz/mkfs/mkfs"
+  }
+]
