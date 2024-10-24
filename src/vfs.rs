@@ -14,6 +14,31 @@ pub struct Inode {
     disk_inode: DiskInode,
 }
 
+pub struct InodeManager(Vec<(usize /* ino */, Weak<Mutex<Inode>>)>);
+
+impl InodeManager {
+    #[allow(unused)]
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    #[allow(unused)]
+    pub fn iget(&mut self, ino: usize) -> Arc<Mutex<Inode>> {
+        self.0.retain(|pair| pair.1.upgrade().is_some()); // remove dead weak references
+        if let Some(pair) = self.0.iter().find(|pair| pair.0 == ino) {
+            pair.1.upgrade().unwrap()
+        } else {
+            // let inode = Arc::new(Mutex::new(Inode {
+            //     ino,
+            //     disk_inode: DiskInode::new(),
+            // }));
+            // self.0.push((ino, Arc::downgrade(&inode)));
+            // inode
+            todo!()
+        }
+    }
+}
+
 impl Inode {
     #[allow(unused)]
     pub fn new(ino: usize, blk_dev: Arc<dyn BlockDevice>) -> Self {
@@ -22,7 +47,7 @@ impl Inode {
     }
 
     #[allow(unused)]
-    /// Truncate inode (discard contents).
+    /// Truncate inode (discard contents), excluding the meta_data of the inode itself.
     ///
     /// # warning
     /// should be enveloped by begin_op() and end_op()
@@ -69,31 +94,6 @@ impl Inode {
                 log_mgr.clone(),
             );
             self.disk_inode.bnos_mut()[NDIRECT] = 0;
-        }
-    }
-}
-
-pub struct InodeManager(Vec<(usize /* blockno */, Weak<Mutex<Inode>>)>);
-
-impl InodeManager {
-    #[allow(unused)]
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    #[allow(unused)]
-    pub fn iget(&mut self, ino: usize) -> Arc<Mutex<Inode>> {
-        self.0.retain(|pair| pair.1.upgrade().is_some()); // remove dead weak references
-        if let Some(pair) = self.0.iter().find(|pair| pair.0 == ino) {
-            pair.1.upgrade().unwrap()
-        } else {
-            // let inode = Arc::new(Mutex::new(Inode {
-            //     ino,
-            //     disk_inode: DiskInode::new(),
-            // }));
-            // self.0.push((ino, Arc::downgrade(&inode)));
-            // inode
-            todo!()
         }
     }
 }
@@ -153,6 +153,8 @@ impl Inode {
 }
 
 #[allow(unused)]
+/// only clear the bitmap
+///
 /// # warning
 /// should be enveloped by begin_op() and end_op()
 fn bfree(
@@ -166,6 +168,8 @@ fn bfree(
 }
 
 #[allow(unused)]
+/// set the bitmap, and return # of the cleared block
+///
 /// # warning
 /// should be enveloped by begin_op() and end_op()
 fn balloc(
