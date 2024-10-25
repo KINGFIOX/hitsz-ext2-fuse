@@ -66,21 +66,23 @@ impl Inode {
     }
 
     #[allow(unused)]
-    pub fn iupdate(&mut self) {
+    /// inode(mem) -> DiskInode(disk)
+    pub fn iupdate(&self) {
         let log_mgr = self.fs.log_mgr();
         let blk_cch_mgr = self.fs.blk_cch_mgr();
         let block = blk_cch_mgr.lock().unwrap().get_block_cache(
             Inode::ino2blk(self.ino, self.fs.super_blk()),
             self.blk_dev.clone(),
         );
-        let blk_guard = block.lock().unwrap();
+        let mut blk_guard = block.lock().unwrap();
+        let inode_cache = blk_guard.get_mut::<[DiskInode; IPB]>(0);
+        let dinode = &mut inode_cache[self.ino % IPB];
+        *dinode = self.disk_inode.clone();
 
-        todo!()
-
-        // log_mgr
-        //     .lock()
-        //     .unwrap()
-        //     .write(self.ino, self.blk_dev.get_block_cache(self.ino));
+        log_mgr
+            .lock()
+            .unwrap()
+            .write(Inode::ino2blk(self.ino, self.fs.super_blk()), block.clone());
     }
 
     #[allow(unused)]

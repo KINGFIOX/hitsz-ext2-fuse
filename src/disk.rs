@@ -33,6 +33,7 @@ impl SuperBlock {
 
 #[allow(unused)]
 #[repr(i16)]
+#[derive(Clone, Copy)]
 pub enum FileKind {
     Invalid = 0,
     Directory = 1,
@@ -43,6 +44,7 @@ pub enum FileKind {
 /// inode on disk
 #[allow(unused)]
 #[repr(C)]
+#[derive(Clone)]
 pub struct DiskInode {
     /// File type
     kind: FileKind,
@@ -59,12 +61,34 @@ pub struct DiskInode {
 }
 
 impl DiskInode {
-    pub fn bnos(&self) -> &[u32; NDIRECT + 1] {
-        &self.bnos
+    #[allow(unused)]
+    pub fn kind(&mut self) -> &FileKind {
+        &self.kind
     }
 
-    pub fn bnos_mut(&mut self) -> &mut [u32; NDIRECT + 1] {
-        &mut self.bnos
+    #[allow(unused)]
+    pub fn kind_mut(&mut self) -> &mut FileKind {
+        &mut self.kind
+    }
+
+    #[allow(unused)]
+    pub fn major(&self) -> i16 {
+        self.major
+    }
+
+    #[allow(unused)]
+    pub fn major_mut(&mut self) -> &mut i16 {
+        &mut self.major
+    }
+
+    #[allow(unused)]
+    pub fn minor(&self) -> i16 {
+        self.minor
+    }
+
+    #[allow(unused)]
+    pub fn minor_mut(&mut self) -> &mut i16 {
+        &mut self.minor
     }
 
     #[allow(unused)]
@@ -75,6 +99,24 @@ impl DiskInode {
     #[allow(unused)]
     pub fn n_link_mut(&mut self) -> &mut i16 {
         &mut self.n_link
+    }
+
+    #[allow(unused)]
+    pub fn size(&self) -> u32 {
+        self.size
+    }
+
+    #[allow(unused)]
+    pub fn size_mut(&mut self) -> &mut u32 {
+        &mut self.size
+    }
+
+    pub fn bnos(&self) -> &[u32; NDIRECT + 1] {
+        &self.bnos
+    }
+
+    pub fn bnos_mut(&mut self) -> &mut [u32; NDIRECT + 1] {
+        &mut self.bnos
     }
 }
 
